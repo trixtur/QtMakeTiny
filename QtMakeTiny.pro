@@ -16,3 +16,7 @@ SOURCES += main.cpp\
 HEADERS  += maketiny.h
 
 FORMS    += maketiny.ui
+
+OTHER_FILES += \
+    LICENSE.txt \
+    README.txt
