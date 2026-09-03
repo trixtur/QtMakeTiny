@@ -9,6 +9,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 
 Q_LOGGING_CATEGORY(tinyLog, "maketiny.network")
 
@@ -19,6 +21,26 @@ MakeTiny::MakeTiny(QWidget *parent)
       securityBackendUrl(qEnvironmentVariable("MAKETINY_BACKEND_URL", QStringLiteral("http://127.0.0.1:8787")))
 {
     ui->setupUi(this);
+    auto *centralLayout = new QVBoxLayout(ui->centralWidget);
+    centralLayout->setContentsMargins(8, 8, 8, 8);
+    centralLayout->addWidget(ui->tabWidget);
+
+    auto *makeLayout = new QVBoxLayout(ui->tab);
+    makeLayout->setContentsMargins(8, 8, 8, 8);
+    makeLayout->addWidget(ui->inputUrl);
+    makeLayout->addWidget(ui->layoutWidget);
+    makeLayout->addWidget(ui->tinyUrl_output);
+    makeLayout->addWidget(ui->label);
+    makeLayout->addStretch();
+
+    auto *reverseLayout = new QVBoxLayout(ui->tab_2);
+    reverseLayout->setContentsMargins(8, 8, 8, 8);
+    auto *reverseInputLayout = new QHBoxLayout;
+    reverseInputLayout->addWidget(ui->tinyURL_Input);
+    reverseInputLayout->addWidget(ui->rev_button);
+    reverseLayout->addLayout(reverseInputLayout);
+    reverseLayout->addWidget(ui->LongURL_Output);
+
     ui->serviceCombo->addItem(tr("TinyURL"));
     connect(ui->actionE_xit, &QAction::triggered, this, &QWidget::close);
     connect(ui->mktny_button, &QPushButton::clicked, this, &MakeTiny::makeTiny);
