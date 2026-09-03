@@ -35,6 +35,13 @@ func TestURLhausLookupParsesFinding(t *testing.T) {
 	}
 }
 
+func TestExtractDigest(t *testing.T) {
+	digest := extractDigest("https://example.com/", "text/html; charset=utf-8", `<html><head><title>Example &amp; Demo</title><meta name="description" content="A description"><meta property="og:site_name" content="Example"></head></html>`)
+	if digest.Title != "Example & Demo" || digest.Description != "A description" || digest.SiteName != "Example" {
+		t.Fatalf("unexpected digest: %#v", digest)
+	}
+}
+
 func TestHandlerHealthAndBadRequest(t *testing.T) {
 	h := handler{checker: &Checker{Client: http.DefaultClient, URLhausEndpoint: ""}}
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)

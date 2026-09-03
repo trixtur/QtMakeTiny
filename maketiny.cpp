@@ -133,8 +133,18 @@ void MakeTiny::handleSecurityReply(QNetworkReply *reply, bool reverse)
     } else if (reverse) {
         const QJsonArray chain = result.value(QStringLiteral("chain")).toArray();
         const QString destination = chain.isEmpty() ? pendingUrl : chain.last().toString();
-        const QString escaped = destination.toHtmlEscaped();
-        ui->LongURL_Output->setHtml(QStringLiteral("<a href=\"%1\">%1</a>").arg(escaped));
+        const QJsonObject digest = result.value(QStringLiteral("digest")).toObject();
+        const QString escapedDestination = destination.toHtmlEscaped();
+        const QString title = digest.value(QStringLiteral("title")).toString().toHtmlEscaped();
+        const QString description = digest.value(QStringLiteral("description")).toString().toHtmlEscaped();
+        const QString siteName = digest.value(QStringLiteral("site_name")).toString().toHtmlEscaped();
+        QString summary = QStringLiteral("<div style=\"font-family: -apple-system, sans-serif;\">"
+                                         "<p style=\"font-size: 18px; font-weight: 600; margin: 0 0 6px;\">%1</p>")
+            .arg(title.isEmpty() ? tr("Untitled page") : title);
+        if (!siteName.isEmpty()) summary += QStringLiteral("<p style=\"color: #666; margin: 0 0 8px;\">%1</p>").arg(siteName);
+        if (!description.isEmpty()) summary += QStringLiteral("<p style=\"margin: 0 0 12px;\">%1</p>").arg(description);
+        summary += QStringLiteral("<p style=\"margin: 0;\"><a href=\"%1\">%1</a></p></div>").arg(escapedDestination);
+        ui->LongURL_Output->setHtml(summary);
         ui->statusBar->showMessage(tr("Redirect resolved and checked"));
     } else {
         sendShortenRequest(QUrl(pendingUrl));
