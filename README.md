@@ -2,6 +2,17 @@
 
 A Qt 6 desktop application for creating TinyURL links and resolving short URLs.
 
+Before using the desktop app, start the local safety backend:
+
+```sh
+python3 backend/server.py
+```
+
+The backend checks each URL and redirect hop with Google Web Risk when
+`WEB_RISK_API_KEY` is set and with URLhaus when `URLHAUS_AUTH_KEY` is set. The
+desktop app fails closed if the backend is unavailable or cannot produce a
+verdict. Set `MAKETINY_BACKEND_URL` to use a deployed backend.
+
 ## Build and run
 
 ```sh

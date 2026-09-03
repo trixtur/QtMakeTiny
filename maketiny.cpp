@@ -6,13 +6,17 @@
 #include <QLoggingCategory>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 Q_LOGGING_CATEGORY(tinyLog, "maketiny.network")
 
 MakeTiny::MakeTiny(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MakeTiny),
       networkManager(new QNetworkAccessManager(this)),
-      baseUrl(QStringLiteral("https://tinyurl.com/api-create.php"))
+      baseUrl(QStringLiteral("https://tinyurl.com/api-create.php")),
+      securityBackendUrl(qEnvironmentVariable("MAKETINY_BACKEND_URL", QStringLiteral("http://127.0.0.1:8787")))
 {
     ui->setupUi(this);
     ui->serviceCombo->addItem(tr("TinyURL"));
@@ -23,13 +27,17 @@ MakeTiny::MakeTiny(QWidget *parent)
     connect(ui->rev_button, &QPushButton::clicked, this, &MakeTiny::reverseLookup);
     connect(ui->tinyUrl_output, &QLineEdit::selectionChanged, this, &MakeTiny::copyToClipboard);
     connect(networkManager, &QNetworkAccessManager::finished, this, [this](QNetworkReply *reply) {
-        if (reply->property("operation").toString() == QStringLiteral("reverse"))
-            handleReverseReply(reply);
+        const QString operation = reply->property("operation").toString();
+        if (operation == QStringLiteral("check-shorten"))
+            handleSecurityReply(reply, false);
+        else if (operation == QStringLiteral("check-reverse"))
+            handleSecurityReply(reply, true);
         else
             handleShortenReply(reply);
     });
     ui->statusBar->showMessage(tr("Ready"));
-    qCInfo(tinyLog) << "application initialized" << "service" << baseUrl;
+    qCInfo(tinyLog) << "application initialized" << "service" << baseUrl
+                    << "security backend" << securityBackendUrl;
 }
 
 MakeTiny::~MakeTiny() { delete ui; }
@@ -41,6 +49,11 @@ void MakeTiny::makeTiny()
         showError(tr("Enter a valid HTTP or HTTPS URL."));
         return;
     }
+    submitSecurityCheck(url, false);
+}
+
+void MakeTiny::sendShortenRequest(const QUrl &url)
+{
     QNetworkRequest request(baseUrl);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     QNetworkReply *reply = networkManager->post(request,
@@ -49,7 +62,7 @@ void MakeTiny::makeTiny()
     setBusy(true);
     ui->tinyUrl_output->clear();
     ui->statusBar->showMessage(tr("Creating short URL…"));
-    qCInfo(tinyLog) << "shorten request" << url;
+    qCInfo(tinyLog) << "shorten request after security check" << url;
 }
 
 void MakeTiny::reverseLookup()
@@ -59,14 +72,49 @@ void MakeTiny::reverseLookup()
         showError(tr("Enter a valid HTTP or HTTPS short URL."));
         return;
     }
-    QNetworkRequest request(url);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
-    QNetworkReply *reply = networkManager->get(request);
-    reply->setProperty("operation", QStringLiteral("reverse"));
+    submitSecurityCheck(url, true);
+}
+
+void MakeTiny::submitSecurityCheck(const QUrl &url, bool reverse)
+{
+    pendingUrl = url.toString();
+    QNetworkRequest request(securityBackendUrl.resolved(QUrl(QStringLiteral("/api/url-check"))));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    const QJsonObject payload{{QStringLiteral("url"), pendingUrl}};
+    QNetworkReply *reply = networkManager->post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    reply->setProperty("operation", reverse ? QStringLiteral("check-reverse") : QStringLiteral("check-shorten"));
     setBusy(true);
-    ui->LongURL_Output->setPlainText(tr("Following redirect…"));
-    qCInfo(tinyLog) << "reverse request" << url;
+    if (reverse) ui->LongURL_Output->setPlainText(tr("Checking URL safety…"));
+    else ui->tinyUrl_output->clear();
+    ui->statusBar->showMessage(tr("Checking URL safety…"));
+    qCInfo(tinyLog) << "security check request" << url << "reverse" << reverse;
+}
+
+void MakeTiny::handleSecurityReply(QNetworkReply *reply, bool reverse)
+{
+    setBusy(false);
+    if (reply->error() != QNetworkReply::NoError) {
+        showError(tr("Security check unavailable: %1").arg(reply->errorString()));
+        reply->deleteLater();
+        return;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
+    const QJsonObject result = document.object();
+    const QString verdict = result.value(QStringLiteral("verdict")).toString();
+    if (verdict == QStringLiteral("malicious")) {
+        showError(tr("Blocked: the URL was flagged as potentially harmful."));
+        qCWarning(tinyLog) << "blocked URL" << pendingUrl << result.value(QStringLiteral("findings"));
+    } else if (verdict != QStringLiteral("safe")) {
+        showError(tr("URL safety could not be confirmed."));
+        qCWarning(tinyLog) << "inconclusive URL check" << pendingUrl << result.value(QStringLiteral("errors"));
+    } else if (reverse) {
+        const QJsonArray chain = result.value(QStringLiteral("chain")).toArray();
+        ui->LongURL_Output->setPlainText(chain.isEmpty() ? pendingUrl : chain.last().toString());
+        ui->statusBar->showMessage(tr("Redirect resolved and checked"));
+    } else {
+        sendShortenRequest(QUrl(pendingUrl));
+    }
+    reply->deleteLater();
 }
 
 void MakeTiny::copyToClipboard()
@@ -89,20 +137,6 @@ void MakeTiny::handleShortenReply(QNetworkReply *reply)
         ui->tinyUrl_output->setText(QString::fromUtf8(body));
         ui->statusBar->showMessage(tr("Short URL created"));
         qCInfo(tinyLog) << "shorten succeeded" << reply->url();
-    }
-    reply->deleteLater();
-}
-
-void MakeTiny::handleReverseReply(QNetworkReply *reply)
-{
-    setBusy(false);
-    if (reply->error() != QNetworkReply::NoError) {
-        showError(reply->errorString());
-        qCWarning(tinyLog) << "reverse failed" << reply->error() << reply->errorString();
-    } else {
-        ui->LongURL_Output->setPlainText(reply->url().toString());
-        ui->statusBar->showMessage(tr("Redirect resolved"));
-        qCInfo(tinyLog) << "reverse succeeded" << reply->url();
     }
     reply->deleteLater();
 }

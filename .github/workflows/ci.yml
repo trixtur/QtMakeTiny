@@ -20,3 +20,6 @@ jobs:
       - name: Build and run tests
         working-directory: tests
         run: qmake6 urltools_test.pro && make -j2 && ./urltools_test
+      - name: Run backend tests
+        working-directory: backend
+        run: python3 -m unittest -v
