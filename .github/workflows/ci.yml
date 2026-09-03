@@ -1,0 +1,25 @@
+name: Build and test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Qt
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y qt6-base-dev
+      - name: Build application
+        run: qmake6 QtMakeTiny.pro && make -j2
+      - name: Build and run tests
+        working-directory: tests
+        run: qmake6 urltools_test.pro && make -j2 && ./urltools_test
+      - name: Run backend tests
+        working-directory: backend
+        run: python3 -m unittest -v

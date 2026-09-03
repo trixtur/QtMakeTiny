@@ -1,0 +1,5 @@
+Makefile*
+*.pro.user
+ui_*.h
+__pycache__/
+*.py[cod]
