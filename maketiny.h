@@ -2,46 +2,31 @@
 #define MAKETINY_H
 
 #include <QMainWindow>
-#include <QUrl>
-#include <QString>
-#include <QtNetwork/QNetworkRequest>
-#include <QtNetwork/QNetworkReply>
-#include <QtNetwork/QNetworkAccessManager>
-#include <QObject>
-#include <QStringList>
-#include <QIODevice>
-#include <QWebFrame>
-#include <QWebPage>
-#include <QClipboard>
+#include <QNetworkReply>
+#include "urltools.h"
 
-namespace Ui {
-    class MakeTiny;
-}
+namespace Ui { class MakeTiny; }
 
 class MakeTiny : public QMainWindow
 {
     Q_OBJECT
-
 public:
-    explicit MakeTiny(QWidget *parent = 0);
+    explicit MakeTiny(QWidget *parent = nullptr);
     ~MakeTiny();
-    void createActions();
+
 private slots:
-    void MkTny();
-    void PageData(QNetworkReply*);
-    void CallReverse(QNetworkReply*);
-    void Reverse();
-    void FrameLoad(bool);
-    void CopyToClip();
+    void makeTiny();
+    void reverseLookup();
+    void copyToClipboard();
+    void handleShortenReply(QNetworkReply *reply);
+    void handleReverseReply(QNetworkReply *reply);
 
 private:
     Ui::MakeTiny *ui;
-    QNetworkAccessManager *manager;
-    QNetworkAccessManager *reverseManager;
-    QWebFrame *frame;
-    QWebPage *page;
-    QNetworkRequest request;
-    QString baseURL;
+    QNetworkAccessManager *networkManager;
+    QUrl baseUrl;
+    void setBusy(bool busy);
+    void showError(const QString &message);
 };
 
 #endif // MAKETINY_H

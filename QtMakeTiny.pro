@@ -4,19 +4,21 @@
 #
 #-------------------------------------------------
 
-QT       += core gui network webkit xmlpatterns
+QT       += core gui widgets network
 
 TARGET = QtMakeTiny
 TEMPLATE = app
 
 
 SOURCES += main.cpp\
-        maketiny.cpp
+        maketiny.cpp \
+        urltools.cpp
 
 HEADERS  += maketiny.h
+HEADERS  += urltools.h
 
 FORMS    += maketiny.ui
 
 OTHER_FILES += \
     LICENSE \
-    README
+    README.md
