@@ -21,6 +21,7 @@ MakeTiny::MakeTiny(QWidget *parent)
       securityBackendUrl(qEnvironmentVariable("MAKETINY_BACKEND_URL", QStringLiteral("http://127.0.0.1:8787")))
 {
     ui->setupUi(this);
+    ui->LongURL_Output->setStyleSheet(QStringLiteral("QTextBrowser { color: #0563c1; }"));
     auto *centralLayout = new QVBoxLayout(ui->centralWidget);
     centralLayout->setContentsMargins(8, 8, 8, 8);
     centralLayout->addWidget(ui->tabWidget);
@@ -131,7 +132,9 @@ void MakeTiny::handleSecurityReply(QNetworkReply *reply, bool reverse)
         qCWarning(tinyLog) << "inconclusive URL check" << pendingUrl << result.value(QStringLiteral("errors"));
     } else if (reverse) {
         const QJsonArray chain = result.value(QStringLiteral("chain")).toArray();
-        ui->LongURL_Output->setPlainText(chain.isEmpty() ? pendingUrl : chain.last().toString());
+        const QString destination = chain.isEmpty() ? pendingUrl : chain.last().toString();
+        const QString escaped = destination.toHtmlEscaped();
+        ui->LongURL_Output->setHtml(QStringLiteral("<a href=\"%1\">%1</a>").arg(escaped));
         ui->statusBar->showMessage(tr("Redirect resolved and checked"));
     } else {
         sendShortenRequest(QUrl(pendingUrl));

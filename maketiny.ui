@@ -141,9 +141,9 @@
        <string>Reverse Lookup</string>
       </property>
      </widget>
-     <widget class="QTextEdit" name="LongURL_Output">
+    <widget class="QTextBrowser" name="LongURL_Output">
       <property name="enabled">
-       <bool>false</bool>
+       <bool>true</bool>
       </property>
       <property name="geometry">
        <rect>
@@ -152,6 +152,9 @@
         <width>281</width>
         <height>141</height>
        </rect>
+      </property>
+      <property name="openExternalLinks">
+       <bool>true</bool>
       </property>
       <property name="readOnly">
        <bool>true</bool>
