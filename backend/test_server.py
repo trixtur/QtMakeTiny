@@ -27,8 +27,8 @@ class UrlSafetyTests(unittest.TestCase):
         self.assertEqual(len(result.chain), 2)
 
     @patch("server.resolve_redirects", return_value=["https://short.example/a", "https://safe.example/final"])
-    @patch("server.web_risk_lookup", return_value={"provider": "google-webrisk", "threats": [{"threatTypes": ["MALWARE"]}]})
-    @patch.dict(os.environ, {"WEB_RISK_API_KEY": "test-key"}, clear=True)
+    @patch("server.urlhaus_lookup", return_value={"provider": "urlhaus", "matched": True, "threat": "malware_download", "tags": []})
+    @patch.dict(os.environ, {"URLHAUS_AUTH_KEY": "test-key"}, clear=True)
     def test_threat_finding_is_malicious(self, *_):
         self.assertEqual(check_url("https://short.example/a").verdict, "malicious")
 

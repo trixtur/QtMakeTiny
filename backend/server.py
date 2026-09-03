@@ -61,15 +61,6 @@ def resolve_redirects(start: str) -> list[str]:
     raise ValueError("redirect limit exceeded")
 
 
-def web_risk_lookup(url: str, api_key: str) -> dict:
-    query = urllib.parse.urlencode([("threatTypes", "MALWARE"),
-                                    ("threatTypes", "SOCIAL_ENGINEERING"),
-                                    ("uri", url), ("key", api_key)])
-    request = urllib.request.Request("https://webrisk.googleapis.com/v1/uris:search?" + query)
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-        return {"provider": "google-webrisk", "threats": json.loads(response.read() or b"{}").get("threat", [])}
-
-
 def urlhaus_lookup(url: str, auth_key: str) -> dict:
     body = urllib.parse.urlencode({"url": url}).encode()
     request = urllib.request.Request("https://urlhaus-api.abuse.ch/v1/url/", data=body,
@@ -96,22 +87,15 @@ class CheckResult:
 def check_url(url: str) -> CheckResult:
     chain = resolve_redirects(url)
     findings, errors = [], []
-    web_risk_key = os.environ.get("WEB_RISK_API_KEY")
     urlhaus_key = os.environ.get("URLHAUS_AUTH_KEY")
     for item in chain:
-        if web_risk_key:
-            try:
-                result = web_risk_lookup(item, web_risk_key)
-                if result["threats"]: findings.append({"url": item, **result})
-            except (OSError, ValueError, json.JSONDecodeError) as error:
-                errors.append(f"google-webrisk: {error}")
         if urlhaus_key:
             try:
                 result = urlhaus_lookup(item, urlhaus_key)
                 if result["matched"]: findings.append({"url": item, **result})
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 errors.append(f"urlhaus: {error}")
-    configured = bool(web_risk_key or urlhaus_key)
+    configured = bool(urlhaus_key)
     verdict = "malicious" if findings else ("unknown" if errors or not configured else "safe")
     LOG.info("url check verdict=%s hops=%d findings=%d errors=%d", verdict, len(chain), len(findings), len(errors))
     return CheckResult(verdict, chain, findings, errors)
