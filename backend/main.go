@@ -5,17 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const maxRedirects = 5
+const maxDigestBytes = 512 * 1024
 
 type Finding struct {
 	URL         string   `json:"url"`
@@ -27,10 +30,19 @@ type Finding struct {
 }
 
 type CheckResult struct {
-	Verdict  string    `json:"verdict"`
-	Chain    []string  `json:"chain"`
-	Findings []Finding `json:"findings"`
-	Errors   []string  `json:"errors"`
+	Verdict  string      `json:"verdict"`
+	Chain    []string    `json:"chain"`
+	Findings []Finding   `json:"findings"`
+	Errors   []string    `json:"errors"`
+	Digest   *SiteDigest `json:"digest,omitempty"`
+}
+
+type SiteDigest struct {
+	URL         string `json:"url"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	SiteName    string `json:"site_name,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
 }
 
 type Checker struct {
@@ -130,6 +142,60 @@ func (c *Checker) URLhausLookup(ctx context.Context, rawURL string) (Finding, er
 	return Finding{Provider: "urlhaus", Matched: result.QueryStatus == "ok", Threat: result.Threat, Tags: result.Tags}, nil
 }
 
+func metaValue(document, name string) string {
+	tagPattern := regexp.MustCompile(`(?is)<meta\b[^>]*>`)
+	attributePattern := regexp.MustCompile(`(?i)([a-z][a-z0-9:_-]*)\s*=\s*["']([^"']*)["']`)
+	for _, tag := range tagPattern.FindAllString(document, -1) {
+		attrs := map[string]string{}
+		for _, match := range attributePattern.FindAllStringSubmatch(tag, -1) {
+			attrs[strings.ToLower(match[1])] = html.UnescapeString(strings.TrimSpace(match[2]))
+		}
+		if strings.EqualFold(attrs["name"], name) || strings.EqualFold(attrs["property"], name) {
+			return attrs["content"]
+		}
+	}
+	return ""
+}
+
+func extractDigest(rawURL, contentType, document string) SiteDigest {
+	titlePattern := regexp.MustCompile(`(?is)<title\b[^>]*>(.*?)</title>`)
+	digest := SiteDigest{URL: rawURL, ContentType: contentType}
+	if match := titlePattern.FindStringSubmatch(document); len(match) == 2 {
+		digest.Title = strings.TrimSpace(html.UnescapeString(regexp.MustCompile(`<[^>]+>`).ReplaceAllString(match[1], "")))
+	}
+	digest.Description = metaValue(document, "description")
+	digest.SiteName = metaValue(document, "og:site_name")
+	if digest.Title == "" {
+		digest.Title = metaValue(document, "og:title")
+	}
+	return digest
+}
+
+func (c *Checker) FetchDigest(ctx context.Context, rawURL string) (SiteDigest, error) {
+	client := *c.Client
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return SiteDigest{}, err
+	}
+	req.Header.Set("User-Agent", "QtMakeTiny/1.0")
+	req.Header.Set("Range", fmt.Sprintf("bytes=0-%d", maxDigestBytes-1))
+	resp, err := client.Do(req)
+	if err != nil {
+		return SiteDigest{}, err
+	}
+	defer resp.Body.Close()
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(strings.ToLower(contentType), "text/html") {
+		return SiteDigest{URL: rawURL, ContentType: contentType}, nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDigestBytes))
+	if err != nil {
+		return SiteDigest{}, err
+	}
+	return extractDigest(rawURL, contentType, string(body)), nil
+}
+
 func (c *Checker) CheckURL(ctx context.Context, rawURL string) (CheckResult, error) {
 	chain, err := c.ResolveRedirects(ctx, rawURL)
 	if err != nil {
@@ -158,6 +224,11 @@ func (c *Checker) CheckURL(ctx context.Context, rawURL string) (CheckResult, err
 		result.Verdict = "malicious"
 	} else if c.URLhausKey != "" && len(result.Errors) == 0 {
 		result.Verdict = "safe"
+		if digest, digestErr := c.FetchDigest(ctx, chain[len(chain)-1]); digestErr != nil {
+			result.Errors = append(result.Errors, "digest: "+digestErr.Error())
+		} else {
+			result.Digest = &digest
+		}
 	}
 	log.Printf("event=url_check verdict=%s hops=%d findings=%d errors=%d", result.Verdict, len(chain), len(result.Findings), len(result.Errors))
 	return result, nil
