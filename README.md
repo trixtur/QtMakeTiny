@@ -5,10 +5,10 @@ A Qt 6 desktop application for creating TinyURL links and resolving short URLs.
 Before using the desktop app, start the local safety backend:
 
 ```sh
-python3 backend/server.py
+go run ./backend
 ```
 
-The backend checks each URL and redirect hop with URLhaus when
+The Go backend checks each URL and redirect hop with URLhaus when
 `URLHAUS_AUTH_KEY` is set. The desktop app fails closed if the backend is
 unavailable or cannot produce a verdict. Set `MAKETINY_BACKEND_URL` to use a
 deployed backend.
