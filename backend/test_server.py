@@ -32,5 +32,12 @@ class UrlSafetyTests(unittest.TestCase):
     def test_threat_finding_is_malicious(self, *_):
         self.assertEqual(check_url("https://short.example/a").verdict, "malicious")
 
+    @patch("server.resolve_redirects", return_value=["https://tinyurl.com/test", "https://example.invalid/urlhaus-test"])
+    @patch.dict(os.environ, {"URLHAUS_TEST_URL": "https://example.invalid/urlhaus-test"}, clear=True)
+    def test_local_fixture_is_malicious(self, *_):
+        result = check_url("https://tinyurl.com/test")
+        self.assertEqual(result.verdict, "malicious")
+        self.assertTrue(result.findings[0]["test_fixture"])
+
 
 if __name__ == "__main__": unittest.main()

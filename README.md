@@ -13,6 +13,14 @@ The backend checks each URL and redirect hop with URLhaus when
 unavailable or cannot produce a verdict. Set `MAKETINY_BACKEND_URL` to use a
 deployed backend.
 
+For safe local UI testing, set `URLHAUS_TEST_URL` to the reserved fixture URL.
+This opt-in fixture never contacts the reserved host and simulates a URLhaus
+malware finding:
+
+```sh
+export URLHAUS_TEST_URL='https://example.invalid/urlhaus-test'
+```
+
 ## Build and run
 
 ```sh

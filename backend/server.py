@@ -46,6 +46,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def resolve_redirects(start: str) -> list[str]:
     current = public_http_url(start)
     chain = [current]
+    test_url = os.environ.get("URLHAUS_TEST_URL")
     opener = urllib.request.build_opener(NoRedirect)
     for _ in range(MAX_REDIRECTS):
         request = urllib.request.Request(current, headers={"User-Agent": "QtMakeTiny/1.0"}, method="HEAD")
@@ -56,7 +57,11 @@ def resolve_redirects(start: str) -> list[str]:
         location = response.headers.get("Location")
         if response.status < 300 or response.status >= 400 or not location:
             return chain
-        current = public_http_url(urllib.parse.urljoin(current, location))
+        next_url = urllib.parse.urljoin(current, location)
+        if test_url and next_url == test_url:
+            chain.append(next_url)
+            return chain
+        current = public_http_url(next_url)
         chain.append(current)
     raise ValueError("redirect limit exceeded")
 
@@ -87,15 +92,20 @@ class CheckResult:
 def check_url(url: str) -> CheckResult:
     chain = resolve_redirects(url)
     findings, errors = [], []
+    test_url = os.environ.get("URLHAUS_TEST_URL")
     urlhaus_key = os.environ.get("URLHAUS_AUTH_KEY")
     for item in chain:
+        if test_url and item == test_url:
+            findings.append({"url": item, "provider": "urlhaus", "matched": True,
+                             "threat": "malware_download", "test_fixture": True})
+            continue
         if urlhaus_key:
             try:
                 result = urlhaus_lookup(item, urlhaus_key)
                 if result["matched"]: findings.append({"url": item, **result})
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 errors.append(f"urlhaus: {error}")
-    configured = bool(urlhaus_key)
+    configured = bool(urlhaus_key or test_url)
     verdict = "malicious" if findings else ("unknown" if errors or not configured else "safe")
     LOG.info("url check verdict=%s hops=%d findings=%d errors=%d", verdict, len(chain), len(findings), len(errors))
     return CheckResult(verdict, chain, findings, errors)
