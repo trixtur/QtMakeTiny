@@ -5,7 +5,8 @@ A Qt 6 desktop application for creating TinyURL links and resolving short URLs.
 Before using the desktop app, start the local safety backend:
 
 ```sh
-go run ./backend
+cd backend
+go run .
 ```
 
 The Go backend checks each URL and redirect hop with URLhaus when
